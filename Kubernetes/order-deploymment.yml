@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: orders
-          image: ashvinbhat/order-management:latest
+          image: animan03/order-management:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 5001
