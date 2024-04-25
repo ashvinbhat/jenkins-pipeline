@@ -1,0 +1,91 @@
+pipeline {
+    agent {
+        docker {
+            image 'node:14'
+        }
+    }
+    stages {
+        stage('Clone repository') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/ashvinbhat/jenkins-pipeline.git'
+            }
+        }
+        stage('Build application') {
+            steps {
+                script {
+                    sh 'docker build -t order-management ./orders'
+                    sh 'docker build -t product-management ./products'
+                    sh 'docker build -t user-management ./users'
+                }
+            }
+        }
+        stage('Push Docker images') {
+            steps {
+                script {
+                    sh 'docker tag order-management ashvinbhat/order-management:latest'
+                    sh 'docker push ashvinbhat/order-management:latest'
+                    sh 'docker tag product-management ashvinbhat/product-management:latest'
+                    sh 'docker push ashvinbhat/product-management:latest'
+                    sh 'docker tag user-management ashvinbhat/user-management:latest'
+                    sh 'docker push ashvinbhat/user-management:latest'
+                }
+            }
+        }       
+        stage('Deploy application') {
+            steps {
+                script {
+                    sh 'minikube start'
+                    sh 'kubectl delete services --all'
+                    sh 'kubectl delete deployments --all'
+                    sh 'kubectl apply -f ./Kubernetes/'
+                }
+            }
+        }
+        script ('Start testing') {
+            steps {
+                script {
+                    sh 'docker run -d -p 5001:5001 ashvinbhat/order-management:latest'
+                    sh 'docker run -d -p 5002:5002 ashvinbhat/product-management:latest'
+                    sh 'docker run -d -p 5000:5003 ashvinbhat/user-management:latest'
+                }
+            }
+        }
+        stages {
+            stage('Port Forwarding') {
+                parallel {
+                    stage('Order Management') {
+                        agent {
+                            label 'order-management'
+                        }
+                        steps {
+                            script {
+                                sh 'kubectl port-forward service/order-service 5001:5001'
+                            }
+                        }
+                    }
+                    stage('Product Management') {
+                        agent {
+                            label 'product-management'
+                        }
+                        steps {
+                            script {
+                                sh 'kubectl port-forward service/product-service 5002:5002'
+                            }
+                        }
+                    }
+                    stage('User Management') {
+                        agent {
+                            label 'user-management'
+                        }
+                        steps {
+                            script {
+                                sh 'kubectl port-forward service/user-service 5003:5003'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
